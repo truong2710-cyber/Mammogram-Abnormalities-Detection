@@ -1,0 +1,7 @@
+torch==1.10.2
+streamlit==0.84.0
+numpy==1.19.5
+matplotlib==3.4.2
+torchvision==0.11.3
+cv2==4.5.3
+PIL==8.2.0
