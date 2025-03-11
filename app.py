@@ -10,6 +10,8 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageOps
 
 
+torch.classes.__path__ = [os.path.join(torch.__path__[0], torch.classes.__file__)] 
+
 def check_and_download(file_path, gdrive_url):
     if os.path.exists(file_path):
         print(f"File '{file_path}' already exists.")
