@@ -1,13 +1,10 @@
 import torch
 import torchvision
-import torchvision.models as models
 import cv2
 import os
 import gdown
 import numpy as np
 import streamlit as st
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from torchvision import transforms
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageOps
