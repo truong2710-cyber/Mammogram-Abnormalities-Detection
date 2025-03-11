@@ -85,7 +85,7 @@ def draw_boxes(image_tensor, boxes, scores, color=(0, 255, 0), thickness=2):
 
 # Load model
 num_classes = 2  # One class (class 0) is "background"
-ckpt_path = './checkpoints/train/checkpoint.pth'
+ckpt_path = 'checkpoint.pth'
 ckpt_link = "https://drive.google.com/uc?id=1V-yht4qfH4o5etdcR0QN-EaYZno4ee90"
 model = get_object_detection_model(num_classes)
 check_and_download(ckpt_path, ckpt_link)  
