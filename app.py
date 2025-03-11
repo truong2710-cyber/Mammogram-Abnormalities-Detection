@@ -2,6 +2,8 @@ import torch
 import torchvision
 import torchvision.models as models
 import cv2
+import os
+import gdown
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -9,6 +11,18 @@ import matplotlib.patches as patches
 from torchvision import transforms
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageOps
+
+
+def check_and_download(file_path, gdrive_url):
+    if os.path.exists(file_path):
+        print(f"File '{file_path}' already exists.")
+    else:
+        print(f"File '{file_path}' not found. Downloading from Google Drive...")
+        gdown.download(gdrive_url, file_path, quiet=False)
+        if os.path.exists(file_path):
+            print(f"Download complete: {file_path}")
+        else:
+            print("Download failed.")
 
 
 def get_object_detection_model(num_classes):
@@ -32,13 +46,14 @@ def apply_nms_and_conf_thresh(orig_prediction, iou_thresh=0.5, conf_thresh=0.5):
     return final_prediction
 
 
-def draw_boxes(image_tensor, boxes, color=(0, 255, 0), thickness=2):
+def draw_boxes(image_tensor, boxes, scores, color=(0, 255, 0), thickness=2):
     """
-    Draws bounding boxes on an image tensor.
+    Draws bounding boxes and scores on an image tensor.
 
     Parameters:
     - image_tensor: torch.Tensor of shape (C, H, W), normalized in [0,1]
     - boxes: List of bounding boxes [(x_min, y_min, x_max, y_max), ...]
+    - scores: List of scores corresponding to each box
     - color: Bounding box color (default: green)
     - thickness: Line thickness (default: 2)
 
@@ -51,18 +66,30 @@ def draw_boxes(image_tensor, boxes, color=(0, 255, 0), thickness=2):
     if image_np.shape[-1] == 1:
         image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
 
-    # Draw bounding boxes
-    for box in boxes:
+    # Draw bounding boxes and scores
+    for box, score in zip(boxes, scores):
         x_min, y_min, x_max, y_max = map(int, box)
         cv2.rectangle(image_np, (x_min, y_min), (x_max, y_max), color, thickness)
-
+        
+        # Compute text size relative to box size
+        text = f"{score:.2f}"
+        font_scale = max(0.5, (x_max - x_min) / 100.0)
+        text_thickness = max(1, thickness // 2)
+        
+        # Put text
+        cv2.putText(image_np, text, (x_min, y_min - 5), cv2.FONT_HERSHEY_SIMPLEX, 
+                    font_scale, color, text_thickness, lineType=cv2.LINE_AA)
+    
     return image_np  # (H, W, C), dtype=int
 
 
 # Load model
 num_classes = 2  # One class (class 0) is "background"
+ckpt_path = './checkpoints/train/checkpoint.pth'
+ckpt_link = "https://drive.google.com/uc?id=1V-yht4qfH4o5etdcR0QN-EaYZno4ee90"
 model = get_object_detection_model(num_classes)
-model.load_state_dict(torch.load('./checkpoints/train/checkpoint.pth', map_location=torch.device('cpu')))
+check_and_download(ckpt_path, ckpt_link)  
+model.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
 model.eval()
 
 # Streamlit UI
@@ -94,7 +121,7 @@ if uploaded_files:
     # Display results side-by-side
     for img, tensor, pred in zip(images, tensors, filtered_predictions):
         original = np.array(img)
-        detected = draw_boxes(tensor, pred['boxes'])
+        detected = draw_boxes(tensor, pred['boxes'], pred['scores'])
 
         col1, col2 = st.columns(2)
         with col1:
