@@ -2,6 +2,7 @@ import torch
 import torchvision
 import cv2
 import os
+import hashlib
 import gdown
 import numpy as np
 import streamlit as st
@@ -24,6 +25,7 @@ def check_and_download(file_path, gdrive_url):
             print("Download failed.")
 
 
+@st.cache_resource 
 def get_object_detection_model(num_classes):
     """Load Faster R-CNN model trained on COCO and modify for custom classes."""
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
@@ -32,17 +34,49 @@ def get_object_detection_model(num_classes):
     return model
 
 
-def apply_nms_and_conf_thresh(orig_prediction, iou_thresh=0.5, conf_thresh=0.5):
-    """Apply Non-Maximum Suppression (NMS) and confidence threshold."""
-    keep = torchvision.ops.nms(orig_prediction['boxes'], orig_prediction['scores'], iou_thresh)
-    keep = [int(i.cpu().numpy()) for i in keep if orig_prediction['scores'][i] >= conf_thresh]
+@st.cache_data
+def apply_nms_and_conf_thresh_cached(boxes_tuple, scores_tuple, labels_tuple, iou_thresh=0.5, conf_thresh=0.5):
+    """Cached version of apply_nms_and_conf_thresh using hashable inputs."""
+    # Convert tuples back to tensors
+    boxes = torch.tensor(boxes_tuple).reshape(-1, 4)  # Assuming boxes are (N, 4)
+    scores = torch.tensor(scores_tuple)
+    labels = torch.tensor(labels_tuple)
+
+    # Apply NMS
+    keep = torchvision.ops.nms(boxes, scores, iou_thresh)
+    keep = [int(i) for i in keep if scores[i] >= conf_thresh]
 
     final_prediction = {
-        'boxes': orig_prediction['boxes'][keep],
-        'scores': orig_prediction['scores'][keep],
-        'labels': orig_prediction['labels'][keep]
+        'boxes': boxes[keep],
+        'scores': scores[keep],
+        'labels': labels[keep]
     }
     return final_prediction
+
+# Wrapper function to convert unhashable inputs
+def apply_nms_and_conf_thresh(orig_prediction, iou_thresh=0.5, conf_thresh=0.5):
+    return apply_nms_and_conf_thresh_cached(
+        tuple(orig_prediction['boxes'].cpu().numpy().flatten()),  # Flatten to 1D tuple
+        tuple(orig_prediction['scores'].cpu().numpy()),  # Convert scores to tuple
+        tuple(orig_prediction['labels'].cpu().numpy()),  # Convert labels to tuple
+        iou_thresh,
+        conf_thresh
+    )
+
+
+# Function to hash an image (so we can cache based on content)
+def hash_image(image):
+    image_bytes = image.tobytes()
+    return hashlib.md5(image_bytes).hexdigest()
+
+
+@st.cache_data
+def detect_objects(image_hash, _tensor):
+    """Run the object detection model and cache results based on image hash."""
+    with torch.no_grad():
+        prediction = model([_tensor])[0]  # Assuming single image inference
+    return prediction
+
 
 
 def draw_boxes(image_tensor, boxes, scores, color=(0, 255, 0), thickness=2):
@@ -112,7 +146,7 @@ if uploaded_files:
 
     # Perform batch inference
     with torch.no_grad():
-        predictions = model(tensors)
+        predictions = [detect_objects(hash_image(img), tensor) for img, tensor in zip(images, tensors)]
 
     # Apply NMS and thresholding
     filtered_predictions = [apply_nms_and_conf_thresh(pred, iou_thresh, conf_thresh) for pred in predictions]
